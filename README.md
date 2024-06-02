@@ -22,5 +22,6 @@ A Python script to download YouTube videos with both video and audio at a specif
 pip install pytube
 ```
 ## Usage
+- Simply run the program
 ```
 python Youtube_downloader.py
