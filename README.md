@@ -24,7 +24,8 @@ A Python script that includes a GUI to download and merge YouTube videos from bo
 ```bash
 pip install yt-dlp
 ```
-4. Ensure `ffmpeg` is installed. You can download it from the official FFmpeg website follow installation instructions for your os 
+4. Ensure `ffmpeg` is installed. You can download it from the official [FFmpeg website here](https://github.com/BtbN/FFmpeg-Builds/releases) choose either a zip for windows or linux
+ 
 
 ## Usage
 1. run on the terminal
