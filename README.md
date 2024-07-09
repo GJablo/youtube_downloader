@@ -42,3 +42,12 @@ python Youtube_downloader.py
 6. click the "Download and Merge" button to get your video
 7. Provide a name for the final output file when prompted, the prompt will appear on the terminal, ensuring it ends with `.mp4` and uses underscores instead of spaces (e.g., final_video.mp4).
 8. The video will be stored on the location where you have the python file, i.e current working directory
+
+## Add Ons
+Add FFmpeg to System PATH:
+
+  1. Open the Start Menu, search for "Environment Variables", and select "Edit the system environment variables".
+  2. In the System Properties window, click on the "Environment Variables" button.
+  3. In the Environment Variables window, find the "Path" variable in the "System variables" section and click "Edit".
+  4. In the Edit Environment Variable window, click "New" and add the path to the bin directory of your extracted FFmpeg folder         (e.g., C:\ffmpeg\bin).
+  5. Click "OK" on all windows to apply the changes.
