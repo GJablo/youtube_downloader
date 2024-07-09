@@ -1,12 +1,12 @@
 # Decipher YouTube Video Downloader
 
-A Python script that includes a GUI to download and merge YouTube videos from both video and audio codecs at a specified resolution, with real-time progress updates.
+A Python script that includes a GUI to download and merge YouTube videos from both video and audio codecs at a specified resolution.
 
 ## Features
 
 - Download YouTube videos with both video and audio
 - Select the desired resolution from available options
-- Display real-time download progress
+
 
 ## Requirements
 
