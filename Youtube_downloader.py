@@ -1,166 +1,191 @@
-import os
+import shutil
 import subprocess
-import tkinter as tk
-from tkinter import ttk, messagebox, filedialog
 import threading
+import tkinter as tk
+from pathlib import Path
+from tkinter import filedialog, messagebox, ttk
 
-def get_available_formats(url):
-    """Retrieve available video formats using yt-dlp"""
-    try:
-        result = subprocess.run(
-            ["yt-dlp", "-F", url],
-            stdout=subprocess.PIPE,
-            stderr=subprocess.PIPE,
-            text=True,
-            check=True
+try:
+    import yt_dlp
+except ImportError:  # pragma: no cover - depends on runtime environment
+    yt_dlp = None
+
+BEST_FORMAT = "bestvideo[height<=1080]+bestaudio/best[height<=1080]"
+
+
+class DownloaderApp:
+    def __init__(self, root):
+        self.root = root
+        self.root.title("Decipher YouTube Video Downloader")
+        self.root.geometry("640x220")
+        self.root.minsize(560, 200)
+
+        style = ttk.Style(self.root)
+        try:
+            style.theme_use("clam")
+        except tk.TclError:
+            pass
+
+        self.root.columnconfigure(1, weight=1)
+
+        self.status_var = tk.StringVar(value="Ready")
+        self._build_ui()
+
+    def _build_ui(self):
+        instructions = (
+            "Enter a YouTube URL and download the best available video and audio (up to 1080p), "
+            "merged into a single file."
         )
-        return result.stdout
-    except subprocess.CalledProcessError as e:
-        return f"Error retrieving formats: {e.stderr}"
+        ttk.Label(self.root, text=instructions, wraplength=580, justify="left").grid(
+            row=0, column=0, columnspan=2, padx=12, pady=(14, 10), sticky="w"
+        )
 
-def download_format(url, format_code, output):
-    """Download specific format using yt-dlp"""
-    subprocess.run([
-        "yt-dlp",
-        "-f", format_code,
-        "-o", output,
-        url
-    ], check=True)
+        ttk.Label(self.root, text="Video URL:").grid(row=1, column=0, padx=12, pady=10, sticky="w")
+        self.url_entry = ttk.Entry(self.root, width=60)
+        self.url_entry.grid(row=1, column=1, padx=12, pady=10, sticky="ew")
 
-def merge_video_audio(video_file, audio_file, output_file):
-    """Merge video and audio streams using ffmpeg"""
-    subprocess.run([
-        "ffmpeg",
-        "-i", video_file,
-        "-i", audio_file,
-        "-c", "copy",
-        "-y",  # Overwrite without prompt
-        output_file
-    ], check=True)
+        self.download_btn = ttk.Button(self.root, text="Download", command=self.on_download)
+        self.download_btn.grid(row=2, column=0, columnspan=2, padx=12, pady=14)
 
-def on_download():
-    """Handle format retrieval button click"""
-    video_url = url_entry.get()
-    if not video_url:
-        messagebox.showerror("Error", "Please enter a video URL")
+        self.status_bar = ttk.Label(
+            self.root,
+            textvariable=self.status_var,
+            anchor="w",
+            padding=(8, 4),
+        )
+        self.status_bar.grid(row=3, column=0, columnspan=2, sticky="ew", padx=5, pady=(0, 6))
+
+    def set_status(self, message):
+        self.status_var.set(message)
+
+    def _run_in_thread(self, target, on_error=None, on_finish=None):
+        def worker():
+            try:
+                target()
+            except Exception as exc:
+                if on_error is not None:
+                    self.root.after(0, lambda: on_error(exc))
+            finally:
+                if on_finish is not None:
+                    self.root.after(0, on_finish)
+
+        threading.Thread(target=worker, daemon=True).start()
+
+    def on_download(self):
+        video_url = self.url_entry.get().strip()
+        if not video_url:
+            messagebox.showerror("Error", "Please enter a video URL")
+            return
+
+        if not self._is_youtube_url(video_url):
+            messagebox.showerror("Error", "Please enter a valid YouTube URL")
+            return
+
+        output_file = filedialog.asksaveasfilename(
+            defaultextension=".mp4",
+            filetypes=[("MP4 files", "*.mp4"), ("All files", "*.*")],
+            title="Save Video As",
+        )
+        if not output_file:
+            return
+
+        self.download_btn.state(["disabled"])
+        self.set_status("Downloading and merging best quality...")
+
+        def worker():
+            download_best(video_url, output_file, progress_hook=self._progress_hook)
+            self.root.after(0, lambda: self.set_status("Ready"))
+            self.root.after(0, lambda: messagebox.showinfo("Success", f"Video saved as:\n{output_file}"))
+
+        def on_error(exc):
+            messagebox.showerror("Error", f"Download failed:\n{exc}")
+            self.set_status("Error occurred")
+
+        def on_finish():
+            self.download_btn.state(["!disabled"])
+
+        self._run_in_thread(worker, on_error=on_error, on_finish=on_finish)
+
+    def _progress_hook(self, status):
+        self.root.after(0, lambda: self.set_status(status))
+
+    @staticmethod
+    def _is_youtube_url(url):
+        return "youtube.com" in url or "youtu.be" in url
+
+
+def check_dependencies():
+    issues = []
+    if not shutil.which("ffmpeg"):
+        issues.append("ffmpeg is not installed or is not available in PATH")
+    if yt_dlp is None and not shutil.which("yt-dlp"):
+        issues.append("yt-dlp is not installed")
+    return issues
+
+
+def download_best(url, output_path, progress_hook=None):
+    """Download the best available video+audio (up to 1080p) and merge into output_path."""
+    issues = check_dependencies()
+    if issues:
+        raise RuntimeError("Missing dependencies: " + "; ".join(issues))
+
+    output_path = Path(output_path)
+    output_path.parent.mkdir(parents=True, exist_ok=True)
+    merge_format = output_path.suffix.lstrip(".") or "mp4"
+    outtmpl = str(output_path.with_suffix(""))
+
+    if yt_dlp is not None:
+        def hook(d):
+            if progress_hook is None:
+                return
+            if d["status"] == "downloading":
+                pct = d.get("_percent_str", "").strip()
+                progress_hook(f"Downloading... {pct}")
+            elif d["status"] == "finished":
+                progress_hook("Merging...")
+
+        options = {
+            "format": BEST_FORMAT,
+            "outtmpl": outtmpl + ".%(ext)s",
+            "merge_output_format": merge_format,
+            "quiet": True,
+            "no_warnings": True,
+            "noplaylist": True,
+            "progress_hooks": [hook],
+        }
+        with yt_dlp.YoutubeDL(options) as downloader:
+            downloader.download([url])
         return
 
-    # Disable button during processing
-    get_formats_btn.config(state=tk.DISABLED)
-    status_var.set("Retrieving available formats...")
-
-    def worker():
-        try:
-            formats = get_available_formats(video_url)
-            formats_display.config(state=tk.NORMAL)
-            formats_display.delete(1.0, tk.END)
-            formats_display.insert(tk.END, formats)
-            formats_display.config(state=tk.DISABLED)
-            status_var.set("Formats retrieved successfully!")
-        except Exception as e:
-            messagebox.showerror("Error", f"Failed to get formats: {str(e)}")
-            status_var.set("Ready")
-        finally:
-            get_formats_btn.config(state=tk.NORMAL)
-
-    threading.Thread(target=worker, daemon=True).start()
-
-def on_merge():
-    """Handle download and merge button click"""
-    video_url = url_entry.get()
-    video_format_code = video_format_entry.get()
-    audio_format_code = audio_format_entry.get()
-
-    if not all([video_url, video_format_code, audio_format_code]):
-        messagebox.showerror("Error", "Please enter all required information")
-        return
-
-    # Get output file path
-    output_file = filedialog.asksaveasfilename(
-        defaultextension=".mp4",
-        filetypes=[("MP4 files", "*.mp4"), ("All files", "*.*")],
-        title="Save Video As"
+    subprocess.run(
+        [
+            "yt-dlp",
+            "-f",
+            BEST_FORMAT,
+            "--merge-output-format",
+            merge_format,
+            "-o",
+            outtmpl + ".%(ext)s",
+            url,
+        ],
+        check=True,
     )
-    if not output_file:
-        return  # User canceled
 
-    # Disable button during processing
-    merge_btn.config(state=tk.DISABLED)
-    status_var.set("Downloading and merging...")
 
-    def worker():
-        try:
-            video_output = "temp_video.mp4"
-            audio_output = "temp_audio.m4a"
+def main():
+    issues = check_dependencies()
+    if issues:
+        message = "The following requirements are missing:\n- " + "\n- ".join(issues)
+        root = tk.Tk()
+        root.withdraw()
+        messagebox.showerror("Missing dependencies", message)
+        root.destroy()
+        return
 
-            download_format(video_url, video_format_code, video_output)
-            download_format(video_url, audio_format_code, audio_output)
-            merge_video_audio(video_output, audio_output, output_file)
+    root = tk.Tk()
+    app = DownloaderApp(root)
+    root.mainloop()
 
-            # Cleanup temporary files
-            if os.path.exists(video_output):
-                os.remove(video_output)
-            if os.path.exists(audio_output):
-                os.remove(audio_output)
 
-            messagebox.showinfo("Success", f"Video saved as:\n{output_file}")
-            status_var.set("Ready")
-        except Exception as e:
-            messagebox.showerror("Error", f"Processing failed: {str(e)}")
-            status_var.set("Error occurred")
-        finally:
-            merge_btn.config(state=tk.NORMAL)
-
-    threading.Thread(target=worker, daemon=True).start()
-
-# Create main window
-app = tk.Tk()
-app.title("Decipher YouTube Video Downloader")
-app.resizable(True, True)
-
-# Configure grid
-app.columnconfigure(1, weight=1)
-app.rowconfigure(1, weight=1)
-
-# URL Section
-tk.Label(app, text="Video URL:").grid(row=0, column=0, padx=10, pady=10, sticky="w")
-url_entry = tk.Entry(app, width=50)
-url_entry.grid(row=0, column=1, padx=10, pady=10, sticky="ew")
-
-get_formats_btn = tk.Button(app, text="Get Formats", command=on_download)
-get_formats_btn.grid(row=0, column=2, padx=10, pady=10)
-
-# Formats Display
-frame = ttk.Frame(app)
-frame.grid(row=1, column=0, columnspan=3, padx=10, pady=10, sticky="nsew")
-frame.columnconfigure(0, weight=1)
-frame.rowconfigure(0, weight=1)
-
-scrollbar = tk.Scrollbar(frame)
-scrollbar.pack(side=tk.RIGHT, fill=tk.Y)
-
-formats_display = tk.Text(frame, width=100, height=20, yscrollcommand=scrollbar.set)
-formats_display.pack(side=tk.LEFT, fill=tk.BOTH, expand=True)
-formats_display.config(state=tk.DISABLED)
-scrollbar.config(command=formats_display.yview)
-
-# Format Selection
-tk.Label(app, text="Video Format Code:").grid(row=2, column=0, padx=10, pady=10, sticky="w")
-video_format_entry = tk.Entry(app, width=20)
-video_format_entry.grid(row=2, column=1, padx=10, pady=10, sticky="w")
-
-tk.Label(app, text="Audio Format Code:").grid(row=3, column=0, padx=10, pady=10, sticky="w")
-audio_format_entry = tk.Entry(app, width=20)
-audio_format_entry.grid(row=3, column=1, padx=10, pady=10, sticky="w")
-
-# Merge Button
-merge_btn = tk.Button(app, text="Download and Merge", command=on_merge)
-merge_btn.grid(row=4, column=0, columnspan=3, padx=10, pady=10)
-
-# Status Bar
-status_var = tk.StringVar()
-status_var.set("Ready")
-status_bar = tk.Label(app, textvariable=status_var, bd=1, relief=tk.SUNKEN, anchor=tk.W)
-status_bar.grid(row=5, column=0, columnspan=3, sticky="ew", padx=5, pady=5)
-
-app.mainloop()
+if __name__ == "__main__":
+    main()
