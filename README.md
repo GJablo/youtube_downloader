@@ -5,49 +5,74 @@ A Python script that includes a GUI to download and merge YouTube videos from bo
 ## Features
 
 - Download YouTube videos with both video and audio
-- Select the desired resolution from available options
-
 
 ## Requirements
 
 - Python 3.x
 - `yt-dlp`
 - `ffmpeg` (make sure it is installed and available in your system's PATH)
-- `tkinter` (install it via your package manager if not included with Python)
+- `tkinter` (use your OS package manager if it is not included with Python)
 
 ## Installation
 
 1. Clone the repository or download the script.
-2. Ensure you have Python 3.x installed on your system
-3. Install the required `yt-dlp` library using pip:
+2. From the repository root, create and activate a Python virtual environment:
 
 ```bash
-pip install yt-dlp
+python3 -m venv .venv
 ```
-4. Ensure `ffmpeg` is installed. You can download it from the official [FFmpeg website here](https://github.com/BtbN/FFmpeg-Builds/releases) choose either a zip for windows or linux
-5. Install tkinter
+
 ```bash
-pip install tk
+source .venv/bin/activate
 ```
+
+3. Install Python dependencies from the requirements file:
+
+```bash
+python -m pip install --upgrade pip
+python -m pip install -r requirements.txt
+```
+
+4. Install `ffmpeg` and `tkinter` using your operating system package manager if needed.
+
+- Debian/Ubuntu/Kali:
+
+```bash
+sudo apt update
+sudo apt install ffmpeg python3-tk
+```
+
+- Fedora:
+
+```bash
+sudo dnf install ffmpeg python3-tkinter
+```
+
+- macOS (Homebrew):
+
+```bash
+brew install ffmpeg
+```
+
+- Windows:
+  1. Install `ffmpeg` and add it to your PATH. You can download it from the official [FFmpeg website here](https://github.com/BtbN/FFmpeg-Builds/releases)
+  2. Install Python using the official installer and make sure the "tkinter" option is enabled.
 
 ## Usage
-1. run on the terminal
+
+1. Activate the virtual environment and run the script:
+
 ```bash
+source .venv/bin/activate
 python Youtube_downloader.py
 ```
-2. The GUI window will open. Enter the Youtube video URL in its respective field
-3. Click the 'Get Formats' button
-4. Available formats will be displayed on the text area
-5. Enter the desired video format code e.g 606 and audio format code e.g 139 in the respective fields
-6. click the "Download and Merge" button to get your video
-7. Provide a name for the final output file when prompted, the prompt will appear on the terminal, ensuring it ends with `.mp4` and uses underscores instead of spaces (e.g., final_video.mp4).
-8. The video will be stored on the location where you have the python file, i.e current working directory
 
-## Add Ons
-Add FFmpeg to System PATH:
+2. Enter the YouTube video URL.
+3. Click "Download".
+4. Choose a filename for the final `.mp4` output.
 
-  1. Open the Start Menu, search for "Environment Variables", and select "Edit the system environment variables".
-  2. In the System Properties window, click on the "Environment Variables" button.
-  3. In the Environment Variables window, find the "Path" variable in the "System variables" section and click "Edit".
-  4. In the Edit Environment Variable window, click "New" and add the path to the bin directory of your extracted FFmpeg folder         (e.g., C:\ffmpeg\bin).
-  5. Click "OK" on all windows to apply the changes.
+## Notes
+
+- `yt-dlp` is installed from `requirements.txt`.
+- `ffmpeg` and `tkinter` are system-level dependencies and must be installed separately.
+- If you are using the virtual environment, always activate it before running the script.
